@@ -20,6 +20,9 @@ twilio==8.10.0
 httpx==0.26.0
 aiohttp==3.9.1
 
+# AI - Gemini API
+google-genai>=1.0.0
+
 # AI/ML (for future use)
 # tensorflow==2.15.0
 # numpy==1.26.3

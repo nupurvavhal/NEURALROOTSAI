@@ -401,6 +401,158 @@ WHOLESALERS_DATA = [
     },
 ]
 
+# ============================================================================
+# IOT SENSOR DATA (Sample readings for each farmer)
+# ============================================================================
+IOT_DATA = [
+    # Farmer F001 - Ramesh Patil
+    {
+        "farmer_id": "F001",
+        "device_id": "ESP32-001",
+        "temperature": 28.5,
+        "humidity": 65.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=tomatoes1",
+        "freshness_score": 92,
+        "health_status": "excellent",
+        "shelf_life_hours": 72,
+        "crop_type": "Tomatoes",
+        "alert_generated": False,
+    },
+    {
+        "farmer_id": "F001",
+        "device_id": "ESP32-001",
+        "temperature": 29.2,
+        "humidity": 68.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=tomatoes2",
+        "freshness_score": 88,
+        "health_status": "good",
+        "shelf_life_hours": 60,
+        "crop_type": "Tomatoes",
+        "alert_generated": False,
+    },
+    # Farmer F002 - Vikram Deshmukh
+    {
+        "farmer_id": "F002",
+        "device_id": "ESP32-002",
+        "temperature": 24.0,
+        "humidity": 55.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=grapes1",
+        "freshness_score": 95,
+        "health_status": "excellent",
+        "shelf_life_hours": 96,
+        "crop_type": "Grapes",
+        "alert_generated": False,
+    },
+    # Farmer F003 - Suresh Kumar
+    {
+        "farmer_id": "F003",
+        "device_id": "ESP32-003",
+        "temperature": 32.5,
+        "humidity": 75.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=mangoes1",
+        "freshness_score": 78,
+        "health_status": "warning",
+        "shelf_life_hours": 36,
+        "crop_type": "Mangoes",
+        "alert_generated": True,
+        "alert_type": "temperature_high",
+        "alert_message": "Temperature exceeds optimal range for mangoes",
+    },
+    # Farmer F004 - Mahesh Jadhav
+    {
+        "farmer_id": "F004",
+        "device_id": "ESP32-004",
+        "temperature": 26.0,
+        "humidity": 60.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=sugarcane1",
+        "freshness_score": 90,
+        "health_status": "excellent",
+        "shelf_life_hours": 120,
+        "crop_type": "Sugarcane",
+        "alert_generated": False,
+    },
+    # Farmer F005 - Vijay Singh Thakur
+    {
+        "farmer_id": "F005",
+        "device_id": "ESP32-005",
+        "temperature": 27.5,
+        "humidity": 45.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=wheat1",
+        "freshness_score": 98,
+        "health_status": "excellent",
+        "shelf_life_hours": 180,
+        "crop_type": "Wheat",
+        "alert_generated": False,
+    },
+    # Farmer F006 - Rajendra Shinde
+    {
+        "farmer_id": "F006",
+        "device_id": "ESP32-006",
+        "temperature": 31.0,
+        "humidity": 80.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=onions1",
+        "freshness_score": 65,
+        "health_status": "critical",
+        "shelf_life_hours": 24,
+        "crop_type": "Onions",
+        "alert_generated": True,
+        "alert_type": "humidity_high",
+        "alert_message": "High humidity detected - spoilage risk for onions",
+    },
+    # Farmer F007 - Ganesh Bhosale
+    {
+        "farmer_id": "F007",
+        "device_id": "ESP32-007",
+        "temperature": 25.5,
+        "humidity": 58.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=potatoes1",
+        "freshness_score": 85,
+        "health_status": "good",
+        "shelf_life_hours": 168,
+        "crop_type": "Potatoes",
+        "alert_generated": False,
+    },
+    # Farmer F008 - Anil Kumbhar
+    {
+        "farmer_id": "F008",
+        "device_id": "ESP32-008",
+        "temperature": 23.0,
+        "humidity": 52.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=bananas1",
+        "freshness_score": 88,
+        "health_status": "good",
+        "shelf_life_hours": 48,
+        "crop_type": "Bananas",
+        "alert_generated": False,
+    },
+    # Farmer F009 - Prakash Gaikwad
+    {
+        "farmer_id": "F009",
+        "device_id": "ESP32-009",
+        "temperature": 28.0,
+        "humidity": 62.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=cotton1",
+        "freshness_score": 94,
+        "health_status": "excellent",
+        "shelf_life_hours": 240,
+        "crop_type": "Cotton",
+        "alert_generated": False,
+    },
+    # Farmer F010 - Dinesh More
+    {
+        "farmer_id": "F010",
+        "device_id": "ESP32-010",
+        "temperature": 26.5,
+        "humidity": 50.0,
+        "image_url": "https://api.dicebear.com/7.x/shapes/svg?seed=soybean1",
+        "freshness_score": 91,
+        "health_status": "excellent",
+        "shelf_life_hours": 200,
+        "crop_type": "Soybean",
+        "alert_generated": False,
+    },
+]
+
 
 async def seed_database():
     """Seed the MongoDB database with initial data"""
@@ -418,6 +570,7 @@ async def seed_database():
         await db.drivers.delete_many({})
         await db.market_items.delete_many({})
         await db.wholesalers.delete_many({})
+        await db.iot_logs.delete_many({})
         print("   ✓ Collections cleared")
         
         # Insert farmers
@@ -452,6 +605,14 @@ async def seed_database():
         result = await db.wholesalers.insert_many(WHOLESALERS_DATA)
         print(f"   ✓ Inserted {len(result.inserted_ids)} wholesalers")
         
+        # Insert IoT data
+        print("\n📡 Seeding IoT sensor data...")
+        for iot_reading in IOT_DATA:
+            iot_reading["timestamp"] = datetime.utcnow().isoformat()
+            iot_reading["createdAt"] = datetime.utcnow().isoformat()
+        result = await db.iot_logs.insert_many(IOT_DATA)
+        print(f"   ✓ Inserted {len(result.inserted_ids)} IoT readings")
+        
         # Create indexes for faster queries
         print("\n📇 Creating indexes...")
         await db.farmers.create_index("id", unique=True)
@@ -470,6 +631,7 @@ async def seed_database():
         print(f"   • Drivers:      {await db.drivers.count_documents({})}")
         print(f"   • Market Items: {await db.market_items.count_documents({})}")
         print(f"   • Wholesalers:  {await db.wholesalers.count_documents({})}")
+        print(f"   • IoT Readings: {await db.iot_logs.count_documents({})}")
         print(f"\n🔗 Database: {DB_NAME}")
         print(f"🔗 MongoDB URL: {MONGODB_URL}")
         

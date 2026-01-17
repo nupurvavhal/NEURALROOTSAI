@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { LiveActivityFeed } from '@/components/LiveActivityFeed';
 import { 
   Users, 
   Truck, 
@@ -267,44 +268,8 @@ export default function CommandCenter({ farmers, drivers, marketItems, wholesale
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity Feed */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-3 p-3 rounded-lg bg-zinc-800/50 hover:bg-zinc-700 transition-all cursor-pointer border border-transparent hover:border-emerald-500/30"
-                onClick={() => handleActivityClick(activity)}
-              >
-                <div className="flex-shrink-0 mt-1">
-                  {activity.type === 'harvest' && <Package className="h-4 w-4 text-emerald-500" />}
-                  {activity.type === 'logistics' && <Truck className="h-4 w-4 text-blue-500" />}
-                  {activity.type === 'market' && <TrendingUp className="h-4 w-4 text-purple-500" />}
-                  {activity.type === 'delivery' && <MapPin className="h-4 w-4 text-green-500" />}
-                  {activity.type === 'alert' && <Activity className="h-4 w-4 text-red-500" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white">{activity.message}</p>
-                  <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1">
-                    <Clock className="h-3 w-3" />
-                    {activity.time}
-                  </p>
-                </div>
-                <div className="flex-shrink-0">
-                  <Badge variant="outline" className="text-xs opacity-0 group-hover:opacity-100">
-                    View
-                  </Badge>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        {/* Live WhatsApp Activity Feed - Real-time from backend */}
+        <LiveActivityFeed />
 
         {/* Top Performing Farmers */}
         <Card>

@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.database import connect_to_mongo, close_mongo_connection  
-from app.routers import whatsapp_webhook, iot_ingest
+from app.routers import whatsapp_webhook, iot_ingest, weather, market
 
 # Lifecycle Manager (Connect DB on startup)
 @asynccontextmanager
@@ -30,6 +30,8 @@ app.add_middleware(
 # Register the WhatsApp router
 app.include_router(whatsapp_webhook.router, prefix="/api/whatsapp", tags=["WhatsApp"])
 app.include_router(iot_ingest.router, prefix="/api/iot", tags=["IoT"])
+app.include_router(weather.router)  # Weather API (prefix already in router)
+app.include_router(market.router)   # Market API (prefix already in router)
 
 @app.get("/")
 def health_check():
@@ -154,5 +156,85 @@ async def get_dashboard_analytics():
                 "systemStatus": "operational"
             }
         }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# REAL-TIME ACTIVITY ENDPOINTS
+# ============================================================================
+
+@app.get("/api/v1/activity/live")
+async def get_live_activity():
+    """Get live activity feed - WhatsApp messages, bookings, driver updates"""
+    from app.core.database import get_database
+    from datetime import datetime, timedelta
+    db = get_database()
+    
+    try:
+        # Get recent WhatsApp messages (last 50)
+        whatsapp_logs = await db.whatsapp_logs.find().sort("timestamp", -1).limit(50).to_list(50)
+        for log in whatsapp_logs:
+            log["_id"] = str(log["_id"])
+            log["type"] = "whatsapp"
+        
+        # Get recent bookings (last 20)
+        bookings = await db.bookings.find().sort("assigned_at", -1).limit(20).to_list(20)
+        for booking in bookings:
+            booking["_id"] = str(booking["_id"])
+            booking["type"] = "booking"
+        
+        # Get active conversation states
+        conversations = await db.conversation_states.find().to_list(50)
+        for conv in conversations:
+            conv["_id"] = str(conv["_id"])
+            conv["type"] = "conversation"
+        
+        # Get recent driver updates
+        drivers = await db.drivers.find().to_list(20)
+        for driver in drivers:
+            driver["_id"] = str(driver["_id"])
+            driver["type"] = "driver"
+        
+        return {
+            "success": True,
+            "data": {
+                "whatsapp_logs": whatsapp_logs,
+                "bookings": bookings,
+                "active_conversations": conversations,
+                "drivers": drivers,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v1/activity/whatsapp")
+async def get_whatsapp_activity():
+    """Get WhatsApp message activity"""
+    from app.core.database import get_database
+    db = get_database()
+    
+    try:
+        logs = await db.whatsapp_logs.find().sort("timestamp", -1).limit(100).to_list(100)
+        for log in logs:
+            log["_id"] = str(log["_id"])
+        return {"success": True, "data": logs, "count": len(logs)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/v1/activity/bookings")
+async def get_bookings_activity():
+    """Get booking activity"""
+    from app.core.database import get_database
+    db = get_database()
+    
+    try:
+        bookings = await db.bookings.find().sort("assigned_at", -1).limit(50).to_list(50)
+        for booking in bookings:
+            booking["_id"] = str(booking["_id"])
+        return {"success": True, "data": bookings, "count": len(bookings)}
     except Exception as e:
         return {"success": False, "error": str(e)}
