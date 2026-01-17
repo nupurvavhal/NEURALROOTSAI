@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str
     TWILIO_AUTH_TOKEN: str
     TWILIO_WHATSAPP_NUMBER: str  
+    MONGODB_URL: str
+    DB_NAME: str = "neural_roots"
 
     class Config:
         env_file = ".env"
