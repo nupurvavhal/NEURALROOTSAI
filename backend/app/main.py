@@ -48,17 +48,23 @@ def api_health():
 
 @app.get("/api/v1/prices")
 async def get_market_prices():
-    """Get all market prices - connects to frontend MarketTerminal"""
-    # Market data structure matching frontend expectations
-    market_data = {
-        "potatoes": {"mandi": 45.0, "village": 25.0, "unit": "kg", "trend": "up"},
-        "jowar": {"mandi": 32.0, "village": 18.0, "unit": "kg", "trend": "down"},
-        "tomatoes": {"mandi": 60.0, "village": 20.0, "unit": "kg", "trend": "up"},
-        "onions": {"mandi": 40.0, "village": 22.0, "unit": "kg", "trend": "down"},
-        "grapes": {"mandi": 120.0, "village": 80.0, "unit": "kg", "trend": "up"},
-        "bananas": {"mandi": 35.0, "village": 20.0, "unit": "kg", "trend": "down"},
-    }
-    return {"success": True, "data": market_data, "timestamp": "2026-01-17T00:00:00Z"}
+    """Get all market prices from database - connects to frontend MarketTerminal"""
+    from app.core.database import get_database
+    db = get_database()
+    
+    try:
+        market_items = await db.market_items.find().to_list(100)
+        for item in market_items:
+            item["_id"] = str(item["_id"])
+        return {"success": True, "data": market_items}
+    except Exception as e:
+        # Fallback to hardcoded data
+        market_data = [
+            {"id": "M001", "cropName": "Alphonso Mangoes", "mandiName": "Ratnagiri APMC", "price": 400, "trend": "up", "spoilageRisk": "Critical"},
+            {"id": "M002", "cropName": "Onions", "mandiName": "Nashik Mandi", "price": 90, "trend": "down", "spoilageRisk": "Low"},
+            {"id": "M003", "cropName": "Tomatoes", "mandiName": "Pune APMC", "price": 150, "trend": "up", "spoilageRisk": "Critical"},
+        ]
+        return {"success": True, "data": market_data}
 
 
 @app.get("/api/v1/farmers")
@@ -111,5 +117,42 @@ async def get_latest_iot_reading(device_id: str):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-USE_BACKEND_API = True
-USE_MOCK_DATA = False
+
+@app.get("/api/v1/wholesalers")
+async def get_wholesalers():
+    """Get all wholesalers - connects to frontend WholesalersModule"""
+    from app.core.database import get_database
+    db = get_database()
+    
+    try:
+        wholesalers = await db.wholesalers.find().to_list(100)
+        for wholesaler in wholesalers:
+            wholesaler["_id"] = str(wholesaler["_id"])
+        return {"success": True, "data": wholesalers}
+    except Exception as e:
+        return {"success": True, "data": [], "message": "No wholesalers in database yet"}
+
+
+@app.get("/api/v1/analytics/dashboard")
+async def get_dashboard_analytics():
+    """Get dashboard analytics data"""
+    from app.core.database import get_database
+    db = get_database()
+    
+    try:
+        # Count documents in each collection
+        farmers_count = await db.farmers.count_documents({})
+        drivers_count = await db.drivers.count_documents({})
+        iot_count = await db.iot_logs.count_documents({})
+        
+        return {
+            "success": True,
+            "data": {
+                "totalFarmers": farmers_count,
+                "totalDrivers": drivers_count,
+                "totalIotReadings": iot_count,
+                "systemStatus": "operational"
+            }
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}

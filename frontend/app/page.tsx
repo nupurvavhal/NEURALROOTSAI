@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
@@ -11,8 +11,8 @@ import TransportAnalytics from '@/components/TransportAnalytics';
 import AnalyticsDashboard from '@/components/AnalyticsDashboard';
 import WholesalersModule from '@/components/WholesalersModule';
 import SimulationOverlay from '@/components/SimulationOverlay';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { farmersData, driversData, marketItemsData, wholesalersData, Farmer, Driver, MarketItem, Wholesaler } from '@/data/mockData';
+import { useBackendData } from '@/hooks/useBackendData';
+import { Farmer, Driver, MarketItem, Wholesaler } from '@/data/mockData';
 
 // Dynamic import for FleetModule to avoid SSR issues with Leaflet
 const FleetModule = dynamic(() => import('@/components/FleetModule'), {
@@ -26,12 +26,20 @@ const FleetModule = dynamic(() => import('@/components/FleetModule'), {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('command');
-  const [farmers, setFarmers, farmersLoaded] = useLocalStorage<Farmer[]>('farmers', farmersData);
-  const [drivers, setDrivers, driversLoaded] = useLocalStorage<Driver[]>('drivers', driversData);
-  const [marketItems, setMarketItems, marketLoaded] = useLocalStorage<MarketItem[]>('marketItems', marketItemsData);
-  const [wholesalers, setWholesalers, wholesalersLoaded] = useLocalStorage<Wholesaler[]>('wholesalers', wholesalersData);
-
-  const isDataLoaded = farmersLoaded && driversLoaded && marketLoaded && wholesalersLoaded;
+  
+  // Fetch data from backend with fallback to mock data
+  const {
+    farmers,
+    drivers,
+    marketItems,
+    wholesalers,
+    isLoading,
+    isConnected,
+    setFarmers,
+    setDrivers,
+    setMarketItems,
+    setWholesalers,
+  } = useBackendData();
 
   const pageTitles: Record<string, string> = {
     command: 'Command Center',
@@ -47,13 +55,13 @@ export default function Home() {
     setActiveTab(tab);
   };
 
-  // Show loading state while data is being loaded from localStorage
-  if (!isDataLoaded) {
+  // Show loading state while data is being fetched
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-zinc-950">
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-emerald-500 border-r-transparent mb-4"></div>
-          <p className="text-zinc-400">Initializing Neural Roots🌱 Platform...</p>
+          <p className="text-zinc-400">Connecting to Neural Roots🌱 Backend...</p>
         </div>
       </div>
     );
