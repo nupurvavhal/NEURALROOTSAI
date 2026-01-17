@@ -330,23 +330,46 @@ async def analyze_market_for_crop(
         crop_lower = crop_type.lower()
         market_items = [m for m in market_items if crop_lower in m.get("cropName", "").lower()]
     
-    # If still no match, create market options with realistic prices based on default
-    if not market_items:
-        print(f"   No DB prices found, using default prices for {crop_type}")
-        # Create varied prices across different mandis (±20% variation)
-        import random
-        market_items = [
-            {"id": "M001", "cropName": crop_type, "mandiName": "Pune APMC", 
-             "price": round(default_price * random.uniform(0.95, 1.15)), "trend": default_trend, "spoilageRisk": default_spoilage},
-            {"id": "M002", "cropName": crop_type, "mandiName": "Mumbai Wholesale", 
-             "price": round(default_price * random.uniform(1.05, 1.25)), "trend": "up", "spoilageRisk": default_spoilage},
-            {"id": "M003", "cropName": crop_type, "mandiName": "Nashik Mandi", 
-             "price": round(default_price * random.uniform(0.90, 1.10)), "trend": default_trend, "spoilageRisk": default_spoilage},
-            {"id": "M004", "cropName": crop_type, "mandiName": "Kolhapur Market", 
-             "price": round(default_price * random.uniform(0.92, 1.12)), "trend": default_trend, "spoilageRisk": default_spoilage},
-            {"id": "M005", "cropName": crop_type, "mandiName": "Solapur APMC", 
-             "price": round(default_price * random.uniform(0.88, 1.08)), "trend": "stable", "spoilageRisk": default_spoilage},
-        ]
+    # Generate multiple mandi options - if we found less than 5 options, add more mandis
+    # This ensures farmers always see multiple options to compare
+    import random
+    
+    # Get mandis already present in market_items
+    existing_mandis = {item.get("mandiName") for item in market_items}
+    
+    # Base price: use from DB if available, otherwise use default
+    base_price = market_items[0].get("price", default_price) if market_items else default_price
+    
+    # All mandis to consider
+    all_mandis = [
+        {"mandiName": "Pune APMC", "price_factor": (0.95, 1.10)},
+        {"mandiName": "Mumbai Wholesale", "price_factor": (1.05, 1.25)},  # Usually higher prices
+        {"mandiName": "Nashik Mandi", "price_factor": (0.90, 1.10)},
+        {"mandiName": "Kolhapur Market", "price_factor": (0.92, 1.12)},
+        {"mandiName": "Solapur APMC", "price_factor": (0.88, 1.08)},
+        {"mandiName": "Satara Mandi", "price_factor": (0.90, 1.05)},
+        {"mandiName": "Aurangabad Market", "price_factor": (0.85, 1.05)},
+    ]
+    
+    # Add missing mandis to get at least 5 options
+    min_options = 5
+    for mandi_info in all_mandis:
+        if len(market_items) >= min_options:
+            break
+        if mandi_info["mandiName"] not in existing_mandis:
+            low, high = mandi_info["price_factor"]
+            varied_price = round(base_price * random.uniform(low, high))
+            market_items.append({
+                "id": f"M_GEN_{len(market_items)+1}",
+                "cropName": crop_type,
+                "mandiName": mandi_info["mandiName"],
+                "price": varied_price,
+                "trend": random.choice(["up", "down", "stable"]) if not market_items else default_trend,
+                "spoilageRisk": default_spoilage
+            })
+            existing_mandis.add(mandi_info["mandiName"])
+    
+    print(f"   Generated {len(market_items)} mandi options for {crop_type}")
     
     # Calculate options for each mandi
     mandi_options = []
