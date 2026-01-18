@@ -1,9 +1,11 @@
 # backend/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from app.core.database import connect_to_mongo, close_mongo_connection  
 from app.routers import whatsapp_webhook, iot_ingest
+from app.routers import workflow_assessment
 
 # Lifecycle Manager (Connect DB on startup)
 @asynccontextmanager
@@ -13,6 +15,9 @@ async def lifespan(app: FastAPI):
     await close_mongo_connection()
 
 app = FastAPI(lifespan=lifespan, title="Neural Roots AI Backend")
+
+# Serve uploaded images
+app.mount("/uploads", StaticFiles(directory="app/uploads"), name="uploads")
 
 # CORS Middleware - Allow frontend connection
 app.add_middleware(
@@ -30,6 +35,7 @@ app.add_middleware(
 # Register the WhatsApp router
 app.include_router(whatsapp_webhook.router, prefix="/api/whatsapp", tags=["WhatsApp"])
 app.include_router(iot_ingest.router, prefix="/api/iot", tags=["IoT"])
+app.include_router(workflow_assessment.router, prefix="/api/workflow", tags=["Workflow Assessment"])
 
 @app.get("/")
 def health_check():
