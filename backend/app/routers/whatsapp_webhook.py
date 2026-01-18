@@ -492,7 +492,41 @@ async def whatsapp_webhook(
         # Handle the conversation
         print(f"🤖 Step 3: Processing conversation...")
         
-        if db_available:
+        # ========================================
+        # CHECK FOR WEATHER COMMANDS FIRST
+        # ========================================
+        message_lower = Body.strip().lower()
+        weather_keywords = ["weather", "mausam", "barish", "rain", "forecast", "climate", "temperature", "temp"]
+        
+        if any(kw in message_lower for kw in weather_keywords):
+            print(f"   🌤️ Weather command detected!")
+            
+            # Get farmer's saved location from memory or default
+            farmer_state = MEMORY_STATE.get(clean_number, {})
+            location = farmer_state.get("village", "Pune")
+            if "," in location:
+                location = location.split(",")[0].strip()
+            
+            # Try to extract location from message
+            for loc in MAHARASHTRA_LOCATIONS.keys():
+                if loc in message_lower:
+                    location = loc.title()
+                    break
+            
+            print(f"   📍 Location: {location}")
+            
+            # Check for quick weather vs detailed
+            if "detail" in message_lower or "full" in message_lower:
+                crops = farmer_state.get("crops", ["tomatoes", "onions"])
+                response_message = await get_weather_update_for_whatsapp(location, crops)
+            else:
+                # Return quick weather + offer detailed
+                response_message = await get_quick_weather(location)
+                response_message += "\n\n📋 *For detailed forecast with precautions, reply:*\n_'weather details'_ or _'weather pune'_"
+            
+            print(f"   ✅ Weather response generated")
+        
+        elif db_available:
             try:
                 response_message = await handle_market_conversation(db, From, Body, ProfileName)
                 print(f"   ✅ Market agent response received")
