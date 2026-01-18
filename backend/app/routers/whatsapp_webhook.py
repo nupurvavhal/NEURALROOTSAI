@@ -3,21 +3,136 @@
 WhatsApp Webhook Router
 Handles incoming WhatsApp messages via Twilio
 Integrates with Market Agent for crop selling flow
+Includes Weather Alerts and Precautions
 """
 
 from fastapi import APIRouter, Form, Request, Response
 from fastapi.responses import PlainTextResponse
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from datetime import datetime
 import traceback
 
 from app.core.database import get_database
 from app.agents.market_agent import handle_market_conversation
 from app.services.twilio_client import send_whatsapp_message
+from app.agents.weather_agent import predict_weather_for_farmer, CROP_WEATHER_SENSITIVITY
+from app.services.weather_api import get_weather_by_city, get_forecast_by_city, MAHARASHTRA_LOCATIONS
 
 router = APIRouter()
 
 print("🚀 WhatsApp webhook router loaded!")
+
+
+# ============================================================================
+# WEATHER HELPER FUNCTIONS
+# ============================================================================
+
+async def get_weather_update_for_whatsapp(location: str, crops: List[str] = None) -> str:
+    """
+    Generate a WhatsApp-formatted weather update with precautions
+    """
+    try:
+        # Default crops if none specified
+        if not crops:
+            crops = ["tomatoes", "onions", "potatoes"]
+        
+        # Get weather prediction
+        prediction = await predict_weather_for_farmer(
+            farmer_id="whatsapp_user",
+            farmer_name="Farmer",
+            location=location,
+            crops=crops
+        )
+        
+        # Format current weather
+        weather_msg = f"""🌤️ *WEATHER UPDATE - {prediction.location.upper()}*
+━━━━━━━━━━━━━━━━━━
+
+🌡️ *Current Conditions:*
+• Temperature: *{prediction.current_temp}°C*
+• Humidity: *{prediction.current_humidity}%*
+• Sky: {prediction.current_conditions.title()}
+
+📊 *Risk Level: {prediction.overall_risk.upper()}* {'🔴' if prediction.overall_risk == 'critical' else '🟠' if prediction.overall_risk == 'high' else '🟡' if prediction.overall_risk == 'medium' else '🟢'}
+"""
+
+        # Add alerts if any
+        if prediction.alerts:
+            weather_msg += "\n⚠️ *WEATHER ALERTS:*\n"
+            for alert in prediction.alerts[:3]:  # Max 3 alerts
+                severity_emoji = "🔴" if alert.severity == "critical" else "🟠" if alert.severity == "high" else "🟡"
+                weather_msg += f"{severity_emoji} {alert.title}\n"
+                weather_msg += f"   {alert.message}\n"
+                weather_msg += f"   ⏰ Expected: {alert.expected_time}\n\n"
+        
+        # Add crop-specific precautions
+        if prediction.crop_precautions:
+            weather_msg += "\n🌾 *CROP PRECAUTIONS:*\n"
+            for precaution in prediction.crop_precautions[:3]:
+                risk_emoji = "🔴" if precaution.risk_level == "high" else "🟡" if precaution.risk_level == "medium" else "🟢"
+                weather_msg += f"\n{risk_emoji} *{precaution.crop_name}* ({precaution.risk_level} risk)\n"
+                for p in precaution.precautions[:2]:
+                    weather_msg += f"   ✅ {p}\n"
+                if precaution.harvest_recommendation:
+                    weather_msg += f"   🚨 {precaution.harvest_recommendation}\n"
+        
+        # Add immediate actions
+        if prediction.immediate_actions and prediction.immediate_actions[0] != "No immediate actions required":
+            weather_msg += "\n⚡ *IMMEDIATE ACTIONS:*\n"
+            for action in prediction.immediate_actions[:3]:
+                weather_msg += f"• {action}\n"
+        
+        # Add next 24h actions
+        if prediction.next_24h_actions and prediction.next_24h_actions[0] != "Continue regular farming practices":
+            weather_msg += "\n📅 *NEXT 24 HOURS:*\n"
+            for action in prediction.next_24h_actions[:3]:
+                weather_msg += f"• {action}\n"
+        
+        # Footer with forecast summary
+        weather_msg += f"""
+━━━━━━━━━━━━━━━━━━
+📝 *Summary:* {prediction.forecast_summary}
+
+_Reply 'weather' for updates anytime_
+_Reply 'sell' to sell your crops_"""
+
+        return weather_msg
+        
+    except Exception as e:
+        print(f"❌ Weather update error: {e}")
+        traceback.print_exc()
+        return f"""🌤️ *Weather Update - {location}*
+
+⚠️ Unable to fetch detailed weather data.
+
+*General Precautions:*
+• Monitor local weather news
+• Keep crops covered if rain expected
+• Water crops during morning/evening
+• Check drainage systems
+
+_Try again later for full forecast_
+_Reply 'sell' to sell your crops_"""
+
+
+async def get_quick_weather(location: str) -> str:
+    """Get a quick weather summary"""
+    try:
+        current = await get_weather_by_city(location)
+        if current:
+            emoji = "🌧️" if "rain" in current.weather_main.lower() else "☀️" if "clear" in current.weather_main.lower() else "⛅"
+            return f"""{emoji} *{location.title()} - Now*
+
+🌡️ {current.temperature}°C (feels like {current.feels_like}°C)
+💧 Humidity: {current.humidity}%
+💨 Wind: {current.wind_speed} m/s
+🌥️ {current.weather_description.title()}
+
+_Reply 'weather details' for full forecast_"""
+        else:
+            return f"❌ Could not fetch weather for {location}. Try: Pune, Mumbai, Nashik, etc."
+    except Exception as e:
+        return f"❌ Weather service error. Please try again."
 
 # In-memory conversation state (fallback when DB is down)
 MEMORY_STATE: Dict[str, dict] = {}
@@ -33,6 +148,31 @@ async def handle_conversation_fallback(farmer_phone: str, message: str, profile_
     # Get or create state
     state = MEMORY_STATE.get(clean_phone, {"step": "idle"})
     
+    # ========================================
+    # WEATHER COMMANDS - Check first
+    # ========================================
+    weather_keywords = ["weather", "mausam", "barish", "rain", "forecast", "climate", "temperature", "temp"]
+    
+    if any(kw in message_lower for kw in weather_keywords):
+        # Check if they specified a location
+        location = state.get("village", "Pune")  # Default to saved village or Pune
+        
+        # Try to extract location from message
+        for loc in MAHARASHTRA_LOCATIONS.keys():
+            if loc in message_lower:
+                location = loc.title()
+                break
+        
+        # Check for quick weather vs detailed
+        if "detail" in message_lower or "full" in message_lower:
+            crops = state.get("crops", ["tomatoes", "onions"])
+            return await get_weather_update_for_whatsapp(location, crops)
+        else:
+            # Return quick weather + offer detailed
+            quick = await get_quick_weather(location)
+            quick += "\n\n📋 *For detailed forecast with precautions, reply:*\n_'weather details'_ or _'weather pune'_"
+            return quick
+    
     # Start keywords
     start_keywords = ["sell", "mandi", "market", "price", "hi", "hello", "start"]
     
@@ -43,7 +183,14 @@ async def handle_conversation_fallback(farmer_phone: str, message: str, profile_
             MEMORY_STATE[clean_phone] = {**state, "step": "awaiting_crop"}
             return f"""🙏 Welcome back, *{state['farmer_name']}*!
 
-*Which crop do you want to sell today?*
+*What would you like to do today?*
+
+🌾 *SELL CROPS* - Reply 'sell'
+🌤️ *WEATHER UPDATE* - Reply 'weather'
+
+━━━━━━━━━━━━━━━
+
+Or select a crop to sell:
 
 1. Tomatoes
 2. Onions
@@ -60,9 +207,12 @@ _You can also type any crop name like: Ginger, Turmeric, Wheat, etc._"""
             MEMORY_STATE[clean_phone] = {"step": "awaiting_name"}
             return """🙏 *Namaste! Welcome to Neural Roots*
 
-I'm your agricultural assistant. I help farmers sell crops at the best prices.
+I'm your agricultural assistant. I help farmers:
+• 🌾 Sell crops at the best prices
+• 🌤️ Get weather updates & precautions
+• 🚛 Book transport to mandis
 
-Let me register you in our system first.
+Let me register you first.
 
 *What is your name?*
 _Example: Ramesh Patil_"""
@@ -94,11 +244,18 @@ _Examples:_
 
 📍 Location: {village}
 
-You're now registered in our network. You can sell your crops at the best mandi prices!
+You're now registered in our network!
 
 ━━━━━━━━━━━━━━━
 
-*Which crop do you want to sell today?*
+*What would you like to do?*
+
+🌾 *SELL CROPS* - Reply 'sell' or select below
+🌤️ *WEATHER UPDATE* - Reply 'weather'
+
+━━━━━━━━━━━━━━━
+
+*Select a crop to sell:*
 
 1. Tomatoes
 2. Onions
@@ -109,7 +266,7 @@ You're now registered in our network. You can sell your crops at the best mandi 
 7. Other (type name)
 
 *Reply with the crop name or number*
-_You can also type any crop name like: Ginger, Turmeric, Wheat, etc._"""
+_Or type 'weather' for weather updates_"""
 
     elif state["step"] == "awaiting_crop":
         crop_map = {
@@ -255,7 +412,14 @@ Your driver will contact you shortly!"""
     
     else:
         MEMORY_STATE[clean_phone] = {"step": "idle"}
-        return "🙏 Welcome! Reply *sell* to start selling your crops."
+        return """🙏 Welcome to *Neural Roots*!
+
+*Available Commands:*
+🌾 Reply *'sell'* - Sell your crops
+🌤️ Reply *'weather'* - Get weather updates
+📊 Reply *'price'* - Check mandi prices
+
+_What would you like to do?_"""
 
 
 @router.post("/webhook")
@@ -448,3 +612,119 @@ async def clear_conversation(phone: str):
     result = await db["conversation_states"].delete_one({"farmer_phone": phone})
     
     return {"success": result.deleted_count > 0, "deleted": result.deleted_count}
+
+
+# ============================================================================
+# WEATHER ALERT ENDPOINTS
+# ============================================================================
+
+@router.post("/weather-alert")
+async def send_weather_alert(
+    to_number: str,
+    location: str = "Pune",
+    crops: Optional[str] = None  # Comma-separated crops
+):
+    """
+    Send a weather alert with precautions to a specific farmer
+    
+    Example: /weather-alert?to_number=+919999999999&location=Nashik&crops=tomatoes,onions
+    """
+    crop_list = crops.split(",") if crops else ["tomatoes", "onions"]
+    crop_list = [c.strip() for c in crop_list]
+    
+    weather_msg = await get_weather_update_for_whatsapp(location, crop_list)
+    result = send_whatsapp_message(to_number, weather_msg)
+    
+    if result:
+        return {"success": True, "message_sid": result, "location": location, "crops": crop_list}
+    else:
+        return {"success": False, "error": "Failed to send weather alert"}
+
+
+@router.post("/broadcast-weather-alerts")
+async def broadcast_weather_alerts():
+    """
+    Send weather alerts to all registered farmers based on their location and crops
+    This can be triggered by a cron job or manual API call
+    """
+    sent_count = 0
+    failed_count = 0
+    results = []
+    
+    try:
+        db = get_database()
+        
+        # Get all farmers from database
+        farmers = await db["farmers"].find().to_list(length=100)
+        
+        for farmer in farmers:
+            phone = farmer.get("phone") or farmer.get("whatsapp_number")
+            if not phone:
+                continue
+                
+            location = farmer.get("location", farmer.get("village", "Pune"))
+            crops = farmer.get("crops", ["tomatoes", "onions"])
+            
+            try:
+                weather_msg = await get_weather_update_for_whatsapp(location, crops)
+                result = send_whatsapp_message(phone, weather_msg)
+                
+                if result:
+                    sent_count += 1
+                    results.append({"phone": phone, "status": "sent", "sid": result})
+                else:
+                    failed_count += 1
+                    results.append({"phone": phone, "status": "failed"})
+            except Exception as e:
+                failed_count += 1
+                results.append({"phone": phone, "status": "error", "error": str(e)})
+        
+        # Also send to in-memory registered users
+        for phone, state in MEMORY_STATE.items():
+            if state.get("farmer_name"):
+                full_phone = f"+91{phone}" if not phone.startswith("+") else phone
+                location = state.get("village", "Pune").split(",")[0]
+                crops = state.get("crops", ["tomatoes", "onions"])
+                
+                try:
+                    weather_msg = await get_weather_update_for_whatsapp(location, crops)
+                    result = send_whatsapp_message(full_phone, weather_msg)
+                    
+                    if result:
+                        sent_count += 1
+                        results.append({"phone": full_phone, "status": "sent", "sid": result})
+                except Exception as e:
+                    pass
+        
+        return {
+            "success": True,
+            "sent": sent_count,
+            "failed": failed_count,
+            "details": results
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e), "sent": sent_count}
+
+
+@router.get("/weather/{location}")
+async def get_weather_for_location(
+    location: str,
+    crops: Optional[str] = None
+):
+    """
+    Get formatted weather update for a location (preview without sending)
+    
+    Example: /weather/pune?crops=tomatoes,onions
+    """
+    crop_list = crops.split(",") if crops else ["tomatoes", "onions"]
+    crop_list = [c.strip() for c in crop_list]
+    
+    weather_msg = await get_weather_update_for_whatsapp(location, crop_list)
+    
+    return {
+        "location": location,
+        "crops": crop_list,
+        "message": weather_msg,
+        "message_length": len(weather_msg)
+    }
